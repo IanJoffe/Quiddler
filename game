@@ -1,0 +1,252 @@
+from random import shuffle
+import re
+
+values = {"A": 2, "B": 8, "C": 8, "D": 5, "E": 2, "F": 6, "G": 6, "H": 7, "I": 2, "J": 13, "K": 8, "L": 3, "M": 5,
+          "N": 5, "O": 2, "P": 6, "Q": 15, "R": 5, "S": 3, "T": 3, "U": 4, "V": 11, "W": 10, "X": 12, "Y": 4, "Z": 14,
+          "ER": 7, "CL": 10, "IN": 7, "TH": 9, "QU": 9}
+frequencies = {"A": 10, "B": 2, "C": 2, "D": 4, "E": 12, "F": 2, "G": 4, "H": 2, "I": 8, "J": 2, "K": 2, "L": 4, "M": 2,
+               "N": 6, "O": 8, "P": 2, "Q": 2, "R": 6, "S": 4, "T": 6, "U": 6, "V": 2, "W": 2, "X": 2, "Y": 4, "Z": 2,
+               "ER": 2, "CL": 2, "IN": 2, "TH": 2, "QU": 2}
+
+
+class Player:
+
+    def __init__(self, name, game):
+        self.name = name
+        self.game = game
+        self.score = 0
+        self.hand = []
+
+    def turn(self):
+
+        # Draw a Card, either from the deck or discard, prompted by player
+        print("It's your turn, " + self.name)
+        print("Your hand contains:\n" + (letter + " ") for letter in self.hand)
+        print("The top discard is: " + self.game.discard[0])
+        draw = input("Would you like to the top discard [D] or a mystery card from the deck [M]...")
+        while draw != "D" or draw != "M":
+            if draw == "D":
+                newCard = self.deck.discard.pop(0);
+            elif draw == "M":
+                newCard = self.game.deck.pop(0);
+            else:
+                draw = input("Please select D or M...")
+        self.hand.insert(0, newCard)
+        print("You have picked up a " + newCard + " which is worth " + str(values[newCard]) + " points")
+        print("Your hand is now:\n" + (letter + " ") for letter in self.hand)
+
+        # Discard a card, prompted by player
+        disc = input("Select a Card to Discard...")
+        while not self.hand.count(disc) > 0:
+            disc = input("Please select a card in your hand...")
+        self.game.discard.insert(0, disc)
+        self.hand.remove(disc)
+
+        # Forces player to go out if someone else already has
+        # Or, asks them if they want to out if they are the first
+        # Also manages errors in input
+        if self.game.goneOut:
+            words = input("You must go out! Seporating each letter (or double-letter)\n with a space, and each word "
+                          "with a comma,\ntype your words here, with unused letters as their own words...")
+            handScore = self.checkWords(words)
+            while not isinstance(handScore, int):
+                if handScore == "Bad Input":
+                    words = input("Format incorrect. Please format again L I K E,TH I S")
+                    handScore = self.checkWords(words)
+                elif handScore == "Used Letters not in Hand, or Letters in Hand unused":
+                    words = input("You used a letter not in you hand or did not use a letter in your hand.\n Try again...")
+                    handScore = self.checkWords(words)
+            self.game.handMostWords[self.name] = self.mostWords(words)
+            self.game.handLongestWords[self.name] = self.longestWord(words)
+            self.game.handLongestWords[self.name] = self.longestWord(words)
+            self.game.handScores[self.name] = handScore
+            print(self.name + " has gone out with " + words + " for " + str(handScore) + " points")
+        else:
+            out = input("Would you like to go out? [Y] or [N]")
+            while out != "Y" or out != "N":
+                out = "Please enter Y or N"
+            if out == "Y":
+                words = input("Reveal your Words! Separate each letter (or double-letter)\n with a space and each "
+                              "word with a comma, or type C to cancel and not go out...")
+                while not words == "C":
+                    handScore = self.checkWords(words)
+                    if handScore == "Bad Input":
+                        words = input("Format incorrect. Please format again L I K E,TH I S or type C to cancel and not go out")
+                        handScore = self.checkWords(words)
+                    elif handScore == "Used Letters not in Hand, or Letters in Hand unused":
+                        words = input("You used a letter not in you hand or did not use a letter in your hand.\n Type C to cancel and not go out or try again...")
+                        handScore = self.checkWords(words)
+                    else:
+                        words = "C"
+                self.game.handMostWords[self.name] = self.mostWords(words)
+                self.game.handLongestWords[self.name] = self.longestWord(words)
+                self.game.handScores[self.name] = handScore
+                self.game.goneOut = True
+                print(self.name + " has gone out with " + words + " for " + str(handScore) + " points")
+
+    # return the number of words in WORDS
+    def mostWords(self, words):
+        return len(re.split(",", words.upper()))
+
+    # return the length of the longest word in WORDS
+    def longestWord(self, words):
+        wordList = re.split(",", words)
+        maxlen = 0
+        for word in wordList:
+            word.replace(" ", "")
+            if len(word) > maxlen:
+                maxlen = len(word)
+        return maxlen
+
+    # Takes a hand of words and returns an error or the value of that hand
+    # MUST IMPLEMENT DICTIONARY CHECK
+    def checkWords(self, words):
+
+        # parse hand
+        words = words.upper()
+        wordList = re.split(",", words)
+        handScore = 0
+        usedLetters = []
+        unusedLetters = []
+        for word in wordList:
+            if len(word) == 1:
+                unusedLetters.append(word)
+            else:
+                letters = re.split(" ", word)
+                for letter in letters:
+                    usedLetters.append(letter)
+
+        # Total up score and ensure only existant letters are used
+        for letter in unusedLetters:
+            try:
+                handScore -= values[letter]
+            except KeyError as e:
+                return "Bad Input"
+        for letter in usedLetters:
+            try:
+                handScore += values[letter]
+            except KeyError as e:
+                return "Bad Input"
+
+        # Check all cards from hand are used once
+        usage = {}
+        for letter in usedLetters + unusedLetters:
+            if letter in list(usage.keys()):
+                usage[letter] += 1
+            else:
+                usage[letter] = 1
+        for letter in list(usage.keys()):
+            if not usage[letter] == self.hand.count(letter):
+                return "Used Letters not in Hand, or Letters in Hand unused"
+        for letter in self.hand:
+            if not usage[letter] == self.hand.count(letter):
+                return "Used Letters not in Hand, or Letters in Hand unused"
+
+        # return score from the hand
+        if (handScore > 0):
+            return handScore
+        else:
+            return 0
+
+
+
+class Game:
+
+    def shuffleSeed(self):
+        return 0
+
+    def endRoundChecker(self):
+        for score in self.handScores:
+            if score == -1:
+                return False
+        return True
+
+    def __init__ (self, players):
+        self.cards = 3
+        self.goneOut = False
+        self.discard = []
+        self.players = players
+        self.deck = []
+        self.handScores = {n: -1 for n in [player.name for player in players]}
+        self.handLongestWords = {}
+        self.handMostWords = {}
+
+    # Play a full 8 round game of Quiddler and determine a winner
+    def playgame(self):
+
+        while self.cards <= 10:
+            self.startround()
+            self.playround()
+            self.cards += 1
+
+        print("The game is over.")
+        finalScores = sorted([player.score for player in self.players], reverse=True)
+        playerOrder = []
+        for score in finalScores:
+            for player in self.players:
+                if player.score == score:
+                    player.append(playerOrder)
+        print("The winner was " + playerOrder[0] + "! Congratulations!")
+        print("The final scores are:")
+        for i in range(0, len(finalScores)):
+            print(playerOrder[i] + ": " + finalScores[i])
+
+    # Start a new hand with CARDNUMBER cards each
+    # Shuffle a clean deck and then deal
+    def startround(self):
+        self.goneOut = False
+        self.deck = []
+        self.discard = []
+        self.handScores = {n: -1 for n in [player.name for player in self.players]}
+        self.handLongestWords = {}
+        self.handMostWords = {}
+        for letter in frequencies.keys():
+            for i in range(0, frequencies[letter] - 1):
+                self.deck.append(letter)
+        shuffle(self.deck, self.shuffleSeed())
+
+        print("Dealing the " + self.cards + " card round")
+        for i in range(0, self.cards):
+            for player in self.players:
+                player.hand.append(self.deck.pop(0))
+        self.discard.append(self.deck.pop(0))
+
+
+    # Play a full round and score bonuses at the end
+    def playround(self):
+
+        #Play round
+        currentPlayer = self.players[(self.cards - 3) % len(self.players)]
+        while not self.endRoundChecker():
+            currentPlayer.turn()
+            currentPlayer = (currentPlayer + 1) % len(self.players)
+        print("The round is over!")
+
+        #count bonuses
+        mostWords = 0
+        mostWordsName = ""
+        for name in list(self.handMostWords.keys()):
+            if self.handMostWords[name] > mostWords:
+                mostWords = self.handMostWords[name]
+                mostWordsName = name
+        if list(self.handMostWords.values()).count(mostWords) == 1:
+            print(mostWordsName + " receives the 10 point most words bonus for " + mostWords + " words and a total round score of " + self.handScores[mostWordsName])
+            self.handScores[mostWordsName] += 10
+        longestWord = 0
+        longestWordName = ""
+        for name in list(self.handLongestWords.keys()):
+            if self.handLongestWords[name] > longestWord:
+                longestWord = self.handLongestWords[name]
+                longestWordName = name
+        if list(self.handLongestWords.values()).count(longestWord) == 1:
+            print(longestWordName + " receives the 10 point longest words bonus for " + longestWord + " words and a total round score of " + self.handScores[longestWordName])
+            self.handScores[longestWordName] += 10
+
+        # Announce scores
+        print("The final scores for the hand are: ")
+        for player in list(self.handScores.keys()):
+            print(player + ": " + str(self.handScores[player]))
+            player.score += self.handScores[player]
+        print("At the end of the " + self.cards + " card hand, the overall scores are: ")
+        for player in self.players:
+            print(player + ": " + player.score)
