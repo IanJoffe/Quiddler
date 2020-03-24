@@ -1,6 +1,8 @@
 import random
 import re
 from time import sleep
+from nltk.corpus import wordnet
+import nltk
 
 values = {"A": 2, "B": 8, "C": 8, "D": 5, "E": 2, "F": 6, "G": 6, "H": 7, "I": 2, "J": 13, "K": 8, "L": 3, "M": 5,
           "N": 5, "O": 2, "P": 6, "Q": 15, "R": 5, "S": 3, "T": 3, "U": 4, "V": 11, "W": 10, "X": 12, "Y": 4, "Z": 14,
@@ -8,6 +10,9 @@ values = {"A": 2, "B": 8, "C": 8, "D": 5, "E": 2, "F": 6, "G": 6, "H": 7, "I": 2
 frequencies = {"A": 10, "B": 2, "C": 2, "D": 4, "E": 12, "F": 2, "G": 4, "H": 2, "I": 8, "J": 2, "K": 2, "L": 4, "M": 2,
                "N": 6, "O": 8, "P": 2, "Q": 2, "R": 6, "S": 4, "T": 6, "U": 6, "V": 2, "W": 2, "X": 2, "Y": 4, "Z": 2,
                "ER": 2, "CL": 2, "IN": 2, "TH": 2, "QU": 2}
+twoPlayerBonusOrder = ["longest word", "most words", "most words", "longest word", "most words", "most words",
+                       "longest word", "most words"]
+AInames = ["QuidTronic", "MechanicalQuid", "QuidBot3000", "TheQuidinator", "ArtificialQuintelligence"]
 
 
 class Player:
@@ -73,10 +78,11 @@ class Player:
                     words = input("Format incorrect. Please format again L I K E,TH I S...\n")
                 elif handScore == "Used Letters not in Hand, or Letters in Hand unused":
                     words = input("You used a letter not in you hand or did not use a letter in your hand.\nTry again...\n")
+                else:
+                    words = input(handScore + ".\nTry Again...\n")
                 words = re.sub(r'\s*,\s*', ",", words)
                 handScore = self.checkWords(words)
             self.game.handMostWords[self.name] = self.mostWords(words)
-            self.game.handLongestWords[self.name] = self.longestWord(words)
             self.game.handLongestWords[self.name] = self.longestWord(words)
             self.game.handScores[self.name] = handScore
             sleep(0.5)
@@ -104,6 +110,8 @@ class Player:
                         handScore = self.checkWords(words)
                     elif handScore == "Unused Letters when first to go out":
                         words = input("You can't be the first to go out if you have unused letters.\nType C to cancel and not go out or try again...\n")
+                    elif not isinstance(handScore, int):
+                        words = input(handScore + ". \nType C to cancel and not go out or try again...\n")
                     else:
                         validWords = True
                     words = re.sub(r'\s*,\s*', ",", words)
@@ -119,7 +127,13 @@ class Player:
 
     # return the number of words in WORDS
     def mostWords(self, words):
-        return len([i for i in re.split(",", words.upper()) if len(i) > 1])
+        toReturn = len([i for i in re.split(",", words.upper()) if len(i) > 1])
+        for d in list(values.keys())[26:31]:
+            for word in words:
+                if d == word and d in self.hand:
+                    if not (d[0] in self.hand and d[1] in self.hand):
+                        toReturn -= 1
+        return toReturn
 
     # return the length of the longest word in WORDS
     def longestWord(self, words):
@@ -147,10 +161,24 @@ class Player:
             else:
                 letters = re.split(" ", word)
                 for letter in letters:
-                    usedLetters.append(letter)
+                    if len(letter) == 2 and len(word) == 2:
+                        unusedLetters.append(word)
+                    else:
+                        usedLetters.append(letter)
+
         if not self.game.goneOut:
             if len(unusedLetters) > 0:
                 return "Unused Letters when first to go out"
+
+        # Make sure words are in the dictionary
+        wordListCopy = list(wordList)
+        for word in wordListCopy:
+            word = re.sub(r'\s', "", word)
+            try:
+                syns = wordnet.synsets(word)
+                syns[0].definition()
+            except IndexError as e:
+                return word + " is not in the dictionary"
 
         # Total up score and ensure only existant letters are used
         for letter in unusedLetters:
@@ -171,18 +199,162 @@ class Player:
                 usage[letter] += 1
             else:
                 usage[letter] = 1
-        for letter in list(usage.keys()):
-            if not usage[letter] == self.hand.count(letter):
-                return "Used Letters not in Hand, or Letters in Hand unused"
-        for letter in self.hand:
-            if not usage[letter] == self.hand.count(letter):
-                return "Used Letters not in Hand, or Letters in Hand unused"
+        try:
+            for letter in list(usage.keys()):
+                if not usage[letter] == self.hand.count(letter):
+                    return "Used Letters not in Hand, or Letters in Hand unused"
+            for letter in self.hand:
+                if not usage[letter] == self.hand.count(letter):
+                    return "Used Letters not in Hand, or Letters in Hand unused"
+        except KeyError as e:
+            return "Used Letters not in Hand, or Letters in Hand unused"
 
         # return score from the hand
         if (handScore > 0):
             return handScore
         else:
             return 0
+
+
+class AI(Player):
+
+    def turn(self):
+
+        print("It's " + self.name + "'s turn")
+
+        def scoreHand(words, hand):
+            used = []
+            for word in words:
+                for l in word:
+                    used.append(l)
+            score = 0
+            for l in hand:
+                if l in used:
+                    score += values[l]
+                    used.remove(l)
+                else:
+                    score -= values[l]
+            if score > 0:
+                return score
+            else:
+                return 0
+
+        draw = random.choice(["D", "M"])
+        if draw == "D":
+            sleep(2.5)
+            print(self.name + " has drawn a " + self.game.discard[0] + " from the discard")
+            self.hand.insert(0, self.game.discard.pop(0))
+        else:
+            sleep(2.5)
+            print(self.name + " has drawn from the deck")
+            self.hand.insert(0, self.game.deck.pop(0))
+        disc = random.choice(self.hand)
+        self.game.discard.insert(0, disc)
+        self.hand.remove(disc)
+        sleep(2.5)
+        print(self.name + " has discarded a " + disc)
+        current = self.makeWords()
+        currentString = str(current)[1:-1]
+        currentString = re.sub(r'\'', "", currentString)
+        if not self.game.goneOut:
+            if sum([len(w) for w in current]) == len(self.hand):
+                self.game.goneOut = True
+                self.game.handMostWords[self.name] = self.mostWords(currentString)
+                self.game.handLongestWords[self.name] = self.longestWord(currentString)
+                self.game.handScores[self.name] = scoreHand(current, self.hand)
+                sleep(2.5)
+                print(self.name + " has gone out with " + currentString + " for " + str(scoreHand(current, self.hand)) + " points")
+                sleep(1.5)
+        else:
+            self.game.handMostWords[self.name] = self.mostWords(currentString)
+            self.game.handLongestWords[self.name] = self.longestWord(currentString)
+            self.game.handScores[self.name] = scoreHand(current, self.hand)
+            used = []
+            for word in current:
+                for letter in word:
+                    used.append(letter)
+            unused = [l for l in self.hand if l not in used]
+            sleep(2.5)
+            for letter in unused:
+                currentString += (", " + letter)
+            print(self.name + " has gone out with " + currentString + " for " + str(scoreHand(current, self.hand)) + " points")
+            sleep(1.5)
+        sleep(2)
+
+
+    def makeWords(self):
+        vocab = {}
+        for i in list(nltk.corpus.wordnet.words()):
+            vocab[i] = i
+        words = []
+
+        def allWords(start, inputList, outputList):
+            for l in inputList:
+                new = start + l
+                try:
+                    var = vocab[new.lower()]
+                    outputList.append(new)
+                except KeyError as e:
+                    pass
+                if len(inputList) > 1:
+                    copy = list(inputList)
+                    copy.remove(l)
+                    allWords(new, copy, outputList)
+
+        for letter in self.hand:
+            handcopy = list(self.hand)
+            allWords(letter, handcopy, words)
+
+
+        def allCombos(startList, remainingLetters, inputList, outputList):
+            for w in inputList:
+                temp = list(remainingLetters)
+                try:
+                    for l in w:
+                        temp.remove(l)
+                    outputList.append(startList + [w])
+                    allCombos(startList + [w], temp, inputList, outputList)
+                except ValueError as e:
+                    pass
+
+        combos = []
+        allCombos([], self.hand, words, combos)
+        for combo in list(combos):
+            for word in combo:
+                if not ("A" in word or "E" in word or "I" in word or "O" in word or "U" in word or "Y" in word):
+                    combos.remove(combo)
+                    break
+
+        def scoreWordList(wordList):
+            used = []
+            for word in wordList:
+                for l in word:
+                    used.append(l)
+            score = 0
+            for l in self.hand:
+                if l in used:
+                    score += values[l]
+                    used.remove(l)
+                else:
+                    score -= values[l]
+            if score > 0:
+                return score
+            else:
+                return 0
+
+        points = {}
+        for wordList in combos:
+            points[tuple(wordList)] = scoreWordList(wordList)
+
+        if len(list(points.values())) > 0:
+            maxPoints = max(list(points.values()))
+            for lst in list(points.keys()):
+                if points[lst] == maxPoints:
+                    return list(lst)
+        else:
+            return []
+
+
 
 
 
@@ -213,6 +385,12 @@ class Game:
     def playgame(self):
         print("Welcome to Quiddler!")
         sleep(1)
+        print("The initial turn order will be:")
+        for player in self.players:
+            sleep(1)
+            print(player.name)
+        sleep(1)
+        print("\r")
 
         while self.cards <= 10:
             self.startround()
@@ -220,7 +398,15 @@ class Game:
             self.cards += 1
 
         print("\r")
+        sleep(1)
         print("The game is over.")
+        sleep(2)
+        print(".")
+        sleep(2)
+        print(".")
+        sleep(2)
+        print(".")
+        sleep(2)
         finalScores = sorted([player.score for player in self.players], reverse=True)
         playerOrder = []
         for score in finalScores:
@@ -239,9 +425,14 @@ class Game:
             print("and " + tied[len(tied) - 1])
         else:
             print("The winner was " + playerOrder[0].name + "! Congratulations!")
+        sleep(2)
         print("The final scores are:")
         for i in range(0, len(finalScores)):
+            sleep(2)
             print(playerOrder[i].name + ": " + str(finalScores[i]))
+        sleep(2)
+        print("\r")
+        print("Thanks for playing!")
 
     # Start a new hand with CARDNUMBER cards each
     # Shuffle a clean deck and then deal
@@ -261,6 +452,9 @@ class Game:
 
         print("Dealing the " + str(self.cards) + " card round")
         sleep(1.5)
+        if len(self.players) == 2:
+            print("The bonus for this round will be " + twoPlayerBonusOrder[self.cards - 3])
+            sleep(1.5)
         for i in range(0, self.cards):
             for player in self.players:
                 player.hand.append(self.deck.pop(0))
@@ -279,35 +473,37 @@ class Game:
         sleep(1.5)
 
         # count bonuses
-        mostWords = 0
-        mostWordsName = ""
-        mostWordsFinal = ""
-        for name in list(self.handMostWords.keys()):
-            if self.handMostWords[name] > mostWords:
-                mostWords = self.handMostWords[name]
-                mostWordsName = name
-        if list(self.handMostWords.values()).count(mostWords) == 1:
-            print(mostWordsName + " receives the 10 point most words bonus for " + str(mostWords) + " words and a total round score of " + str(self.handScores[mostWordsName] + 10))
-            self.handScores[mostWordsName] += 10
-            mostWordsFinal = mostWordsName
-        else:
-            print("Nobody has received the most words bonus")
-        sleep(2)
-        longestWord = 0
-        longestWordName = ""
-        for name in list(self.handLongestWords.keys()):
-            if self.handLongestWords[name] > longestWord:
-                longestWord = self.handLongestWords[name]
-                longestWordName = name
-        if list(self.handLongestWords.values()).count(longestWord) == 1:
-            if longestWordName != mostWordsFinal:
-                print(longestWordName + " receives the 10 point longest words bonus for " + str(longestWord) + " letters and a total round score of " + str(self.handScores[longestWordName] + 10))
+        if (not len(self.players) == 2) or twoPlayerBonusOrder[self.cards - 3] == "most words":
+            mostWords = 0
+            mostWordsName = ""
+            mostWordsFinal = ""
+            for name in list(self.handMostWords.keys()):
+                if self.handMostWords[name] > mostWords:
+                    mostWords = self.handMostWords[name]
+                    mostWordsName = name
+            if list(self.handMostWords.values()).count(mostWords) == 1:
+                print(mostWordsName + " receives the 10 point most words bonus for " + str(mostWords) + " words and a total round score of " + str(self.handScores[mostWordsName] + 10))
+                self.handScores[mostWordsName] += 10
+                mostWordsFinal = mostWordsName
             else:
-                print(longestWordName + " receives the 10 point longest words bonus for " + str(longestWord) + " letters and a total round score of " + str(self.handScores[longestWordName] + 20))
-            self.handScores[longestWordName] += 10
-        else:
-            print("Nobody has received the longest words bonus")
-        sleep(2)
+                print("Nobody has received the most words bonus")
+            sleep(2)
+        if (not len(self.players) == 2) or twoPlayerBonusOrder[self.cards - 2] == "longest word":
+            longestWord = 0
+            longestWordName = ""
+            for name in list(self.handLongestWords.keys()):
+                if self.handLongestWords[name] > longestWord:
+                    longestWord = self.handLongestWords[name]
+                    longestWordName = name
+            if list(self.handLongestWords.values()).count(longestWord) == 1:
+                if longestWordName != mostWordsFinal:
+                    print(longestWordName + " receives the 10 point longest words bonus for " + str(longestWord) + " letters and a total round score of " + str(self.handScores[longestWordName] + 10))
+                else:
+                    print(longestWordName + " receives the 10 point longest words bonus for " + str(longestWord) + " letters and a total round score of " + str(self.handScores[longestWordName] + 20))
+                self.handScores[longestWordName] += 10
+            else:
+                print("Nobody has received the longest words bonus")
+            sleep(2)
 
         # Announce scores
         print("The final scores for the hand are: ")
@@ -326,10 +522,17 @@ class Game:
         sleep(4)
 
 
-#SCRIPT:
-#Initialize a game of Quiddler and then play it out as all three players
-Ian = Player("Ian")
-Gavin = Player("Gavin")
-Ben = Player("Ben")
-myGame = Game([Ian, Gavin, Ben])
+# SCRIPT:
+# Initialize a game of Quiddler and then play it out as all players
+username = input("Enter your name...\n")
+numplayers = input("Including yourself, how many players would you like in this game...\n")
+while numplayers not in ["2", "3", "4", "5", "6"]:
+    numplayers = input("You can only play a game with 2 to 6 players. Enter a new number...\n")
+numplayers = int(numplayers)
+user = Player(username)
+random.shuffle(AInames)
+opponents = AInames[0:numplayers - 1]
+allPlayers = [user] + [AI(opp) for opp in opponents]
+random.shuffle(allPlayers)
+myGame = Game(allPlayers)
 myGame.playgame()
